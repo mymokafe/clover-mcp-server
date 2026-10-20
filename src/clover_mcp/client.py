@@ -287,7 +287,7 @@ class CloverClient:
 
     async def merchant_currency(self) -> str:
         info = await self.get_merchant_info()
-        currency = info.get("defaultCurrency") or info.get("currency")
+        currency = info.get("defaultCurrency") or info.get("currency")    or "USD"
         if not currency:
             raise ValueError(
                 f"Merchant {self._config.merchant_id} response is missing currency metadata; "
