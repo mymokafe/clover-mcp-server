@@ -106,17 +106,16 @@ async def list_shifts(
     """
     ts_filters: list[str] = []
     if date_from or date_to:
-        today = _today_utc()
-        d_from = _parse_date(date_from, "date_from") if date_from else today
-        d_to = _parse_date(date_to, "date_to") if date_to else today
+        d_from = _parse_date(date_from, "date_from") if date_from else await client.merchant_today()
+        d_to = _parse_date(date_to, "date_to") if date_to else await client.merchant_today()
         if d_from > d_to:
             raise ValueError(f"date_from ({d_from}) must be ≤ date_to ({d_to})")
         # Single window is enough for the filter strings; Clover ANDs repeated filters.
         # ponytail: shifts span days, not the 90-day cap of orders/payments — one
         # createdTime/inTime range covers any realistic query; split_window kept for parity.
         chunks = split_window(d_from, d_to)
-        ts_from = date_to_ms(chunks[0][0], end_of_day=False)
-        ts_to = date_to_ms(chunks[-1][1], end_of_day=True)
+        ts_from = date_to_ms(chunks[0][0], end_of_day=False, tz=await client.merchant_tzinfo())
+        ts_to = date_to_ms(chunks[-1][1], end_of_day=True, tz=await client.merchant_tzinfo())
         ts_filters = [f"inTime>={ts_from}", f"inTime<={ts_to}"]
 
     if employee_id:

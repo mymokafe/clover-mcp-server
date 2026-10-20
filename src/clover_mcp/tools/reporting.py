@@ -91,9 +91,8 @@ async def get_sales_summary(
     Requires PAYMENTS_R (covers payments and refunds).
     This tool does NOT support payment capture, refund, or void actions.
     """
-    today = _today_utc()
-    d_from = _parse_date(date_from, "date_from") if date_from else today
-    d_to = _parse_date(date_to, "date_to") if date_to else today
+    d_from = _parse_date(date_from, "date_from") if date_from else await client.merchant_today()
+    d_to = _parse_date(date_to, "date_to") if date_to else await client.merchant_today()
 
     if d_from > d_to:
         raise ValueError(f"date_from ({d_from}) must be ≤ date_to ({d_to})")
@@ -118,8 +117,8 @@ async def get_sales_summary(
     for i, (chunk_start, chunk_end) in enumerate(chunks, 1):
         if len(chunks) > 1:
             await _log(ctx, f"Window {i}/{len(chunks)}: {chunk_start} → {chunk_end}")
-        ts_from = date_to_ms(chunk_start, end_of_day=False)
-        ts_to = date_to_ms(chunk_end, end_of_day=True)
+        ts_from = date_to_ms(chunk_start, end_of_day=False, tz=await client.merchant_tzinfo())
+        ts_to = date_to_ms(chunk_end, end_of_day=True, tz=await client.merchant_tzinfo())
 
         params: dict[str, Any] = {
             "filter": [
@@ -146,8 +145,8 @@ async def get_sales_summary(
 
     # Collect voided payments in the same windows
     for chunk_start, chunk_end in split_window(d_from, d_to):
-        ts_from = date_to_ms(chunk_start, end_of_day=False)
-        ts_to = date_to_ms(chunk_end, end_of_day=True)
+        ts_from = date_to_ms(chunk_start, end_of_day=False, tz=await client.merchant_tzinfo())
+        ts_to = date_to_ms(chunk_end, end_of_day=True, tz=await client.merchant_tzinfo())
 
         void_params: dict[str, Any] = {
             "filter": [
@@ -164,8 +163,8 @@ async def get_sales_summary(
     # are separate objects with a positive `amount` (cents), not negative-amount
     # payments. Covered by PAYMENTS_R.
     for chunk_start, chunk_end in split_window(d_from, d_to):
-        ts_from = date_to_ms(chunk_start, end_of_day=False)
-        ts_to = date_to_ms(chunk_end, end_of_day=True)
+        ts_from = date_to_ms(chunk_start, end_of_day=False, tz=await client.merchant_tzinfo())
+        ts_to = date_to_ms(chunk_end, end_of_day=True, tz=await client.merchant_tzinfo())
 
         refund_params: dict[str, Any] = {
             "filter": [
@@ -227,9 +226,8 @@ async def get_top_items(
     if top_n < 1 or top_n > 100:
         raise ValueError("top_n must be between 1 and 100")
 
-    today = _today_utc()
-    d_from = _parse_date(date_from, "date_from") if date_from else today
-    d_to = _parse_date(date_to, "date_to") if date_to else today
+    d_from = _parse_date(date_from, "date_from") if date_from else await client.merchant_today()
+    d_to = _parse_date(date_to, "date_to") if date_to else await client.merchant_today()
     if d_from > d_to:
         raise ValueError(f"date_from ({d_from}) must be ≤ date_to ({d_to})")
 
@@ -238,8 +236,8 @@ async def get_top_items(
     # name -> [units, revenue_cents]
     tally: dict[str, list[int]] = {}
     for chunk_start, chunk_end in split_window(d_from, d_to):
-        ts_from = date_to_ms(chunk_start, end_of_day=False)
-        ts_to = date_to_ms(chunk_end, end_of_day=True)
+        ts_from = date_to_ms(chunk_start, end_of_day=False, tz=await client.merchant_tzinfo())
+        ts_to = date_to_ms(chunk_end, end_of_day=True, tz=await client.merchant_tzinfo())
         params: dict[str, Any] = {
             "filter": [f"createdTime>={ts_from}", f"createdTime<={ts_to}"],
         }
@@ -290,9 +288,8 @@ async def list_payments(
     if limit < 1 or limit > 200:
         raise ValueError("limit must be between 1 and 200")
 
-    today = _today_utc()
-    d_from = _parse_date(date_from, "date_from") if date_from else today
-    d_to = _parse_date(date_to, "date_to") if date_to else today
+    d_from = _parse_date(date_from, "date_from") if date_from else await client.merchant_today()
+    d_to = _parse_date(date_to, "date_to") if date_to else await client.merchant_today()
 
     if d_from > d_to:
         raise ValueError(f"date_from ({d_from}) must be ≤ date_to ({d_to})")
@@ -302,8 +299,8 @@ async def list_payments(
     for chunk_start, chunk_end in split_window(d_from, d_to):
         if len(results) >= limit:
             break
-        ts_from = date_to_ms(chunk_start, end_of_day=False)
-        ts_to = date_to_ms(chunk_end, end_of_day=True)
+        ts_from = date_to_ms(chunk_start, end_of_day=False, tz=await client.merchant_tzinfo())
+        ts_to = date_to_ms(chunk_end, end_of_day=True, tz=await client.merchant_tzinfo())
 
         params: dict[str, Any] = {
             "filter": [
@@ -341,9 +338,8 @@ async def list_refunds(
     if limit < 1 or limit > 200:
         raise ValueError("limit must be between 1 and 200")
 
-    today = _today_utc()
-    d_from = _parse_date(date_from, "date_from") if date_from else today
-    d_to = _parse_date(date_to, "date_to") if date_to else today
+    d_from = _parse_date(date_from, "date_from") if date_from else await client.merchant_today()
+    d_to = _parse_date(date_to, "date_to") if date_to else await client.merchant_today()
 
     if d_from > d_to:
         raise ValueError(f"date_from ({d_from}) must be ≤ date_to ({d_to})")
@@ -353,8 +349,8 @@ async def list_refunds(
     for chunk_start, chunk_end in split_window(d_from, d_to):
         if len(results) >= limit:
             break
-        ts_from = date_to_ms(chunk_start, end_of_day=False)
-        ts_to = date_to_ms(chunk_end, end_of_day=True)
+        ts_from = date_to_ms(chunk_start, end_of_day=False, tz=await client.merchant_tzinfo())
+        ts_to = date_to_ms(chunk_end, end_of_day=True, tz=await client.merchant_tzinfo())
 
         params: dict[str, Any] = {
             "filter": [f"createdTime>={ts_from}", f"createdTime<={ts_to}"],
@@ -407,8 +403,8 @@ async def _collect_success_payments(
     """Collect raw result=SUCCESS payments across 90-day windowed chunks."""
     payments: list[dict[str, Any]] = []
     for chunk_start, chunk_end in split_window(d_from, d_to):
-        ts_from = date_to_ms(chunk_start, end_of_day=False)
-        ts_to = date_to_ms(chunk_end, end_of_day=True)
+        ts_from = date_to_ms(chunk_start, end_of_day=False, tz=await client.merchant_tzinfo())
+        ts_to = date_to_ms(chunk_end, end_of_day=True, tz=await client.merchant_tzinfo())
         params: dict[str, Any] = {
             "filter": [
                 f"createdTime>={ts_from}",
@@ -435,9 +431,8 @@ async def get_sales_by_employee(
 
     Requires PAYMENTS_R.
     """
-    today = _today_utc()
-    d_from = _parse_date(date_from, "date_from") if date_from else today
-    d_to = _parse_date(date_to, "date_to") if date_to else today
+    d_from = _parse_date(date_from, "date_from") if date_from else await client.merchant_today()
+    d_to = _parse_date(date_to, "date_to") if date_to else await client.merchant_today()
     if d_from > d_to:
         raise ValueError(f"date_from ({d_from}) must be ≤ date_to ({d_to})")
 
@@ -484,9 +479,8 @@ async def get_tips_by_employee(
 
     Requires PAYMENTS_R.
     """
-    today = _today_utc()
-    d_from = _parse_date(date_from, "date_from") if date_from else today
-    d_to = _parse_date(date_to, "date_to") if date_to else today
+    d_from = _parse_date(date_from, "date_from") if date_from else await client.merchant_today()
+    d_to = _parse_date(date_to, "date_to") if date_to else await client.merchant_today()
     if d_from > d_to:
         raise ValueError(f"date_from ({d_from}) must be ≤ date_to ({d_to})")
 
@@ -534,7 +528,7 @@ async def get_sales_by_hour(
 
     Requires PAYMENTS_R.
     """
-    d = _parse_date(date, "date") if date else _today_utc()
+    d = _parse_date(date, "date") if date else await client.merchant_today()
 
     currency = await client.merchant_currency()
     tz_name = await client.merchant_timezone()
@@ -597,3 +591,114 @@ async def list_credits(client: CloverClient) -> dict[str, Any]:
         if len(credits_list) >= _CREDITS_MAX:
             break
     return {"credits": credits_list, "count": len(credits_list)}
+
+
+def _parse_hhmm(value: str, param_name: str) -> tuple[int, int]:
+    """Parse a local clock time 'HH:MM' (24-hour) into (hour, minute)."""
+    try:
+        hour_s, minute_s = value.strip().split(":")
+        hour, minute = int(hour_s), int(minute_s)
+    except (ValueError, AttributeError) as exc:
+        raise ValueError(f"{param_name} must be a 24-hour time HH:MM, got {value!r}") from exc
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        raise ValueError(f"{param_name} must be a 24-hour time HH:MM, got {value!r}")
+    return hour, minute
+
+
+async def get_item_sales(
+    client: CloverClient,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    start_time: str | None = None,
+    end_time: str | None = None,
+    name_contains: list[str] | None = None,
+) -> dict[str, Any]:
+    """Return EVERY item sold in a window, with units and revenue — no top-N cap.
+
+    Dates are the store's LOCAL business days (merchant timezone). Optional
+    start_time/end_time ('HH:MM', 24-hour, local) narrow the window on the
+    first/last day, e.g. date_from=today, start_time='06:00'. Walks every order
+    in the window (all pages). Refunded line items are excluded.
+
+    name_contains: optional list of case-insensitive substrings; when given,
+    only items whose name contains any of them are returned, and
+    `matching_units` totals them (e.g. ["latte"] counts every latte).
+    """
+    tz = await client.merchant_tzinfo()
+    today = await client.merchant_today()
+    d_from = _parse_date(date_from, "date_from") if date_from else today
+    d_to = _parse_date(date_to, "date_to") if date_to else d_from
+    if d_from > d_to:
+        raise ValueError(f"date_from ({d_from}) must be ≤ date_to ({d_to})")
+
+    sh, sm = _parse_hhmm(start_time, "start_time") if start_time else (0, 0)
+    start_dt = datetime(d_from.year, d_from.month, d_from.day, sh, sm, tzinfo=tz)
+    if end_time:
+        eh, em = _parse_hhmm(end_time, "end_time")
+        end_dt = datetime(d_to.year, d_to.month, d_to.day, eh, em, 59, 999000, tzinfo=tz)
+    else:
+        end_dt = datetime(d_to.year, d_to.month, d_to.day, 23, 59, 59, 999000, tzinfo=tz)
+    if start_dt > end_dt:
+        raise ValueError("start of window must be before end of window")
+    start_ms, end_ms = int(start_dt.timestamp() * 1000), int(end_dt.timestamp() * 1000)
+
+    currency = await client.merchant_currency()
+    needles = [n.lower() for n in (name_contains or []) if n and n.strip()]
+
+    tally: dict[str, list[int]] = {}
+    order_count = 0
+    first_ms: int | None = None
+    last_ms: int | None = None
+    for chunk_start, chunk_end in split_window(d_from, d_to):
+        lo = max(start_ms, date_to_ms(chunk_start, end_of_day=False, tz=tz))
+        hi = min(end_ms, date_to_ms(chunk_end, end_of_day=True, tz=tz))
+        params: dict[str, Any] = {"filter": [f"createdTime>={lo}", f"createdTime<={hi}"]}
+        async for order in client.iterate(
+            "/orders", limit=100, max_pages=1000, expand="lineItems", **params
+        ):
+            order_count += 1
+            created = order.get("createdTime")
+            if isinstance(created, int):
+                first_ms = created if first_ms is None else min(first_ms, created)
+                last_ms = created if last_ms is None else max(last_ms, created)
+            line_items = order.get("lineItems", {})
+            elements = line_items.get("elements", []) if isinstance(line_items, dict) else []
+            for li in elements:
+                if not isinstance(li, dict) or li.get("refunded"):
+                    continue
+                name = li.get("name") or "(unnamed)"
+                entry = tally.setdefault(name, [0, 0])
+                entry[0] += 1
+                entry[1] += li.get("price", 0) or 0
+
+    if needles:
+        tally = {k: v for k, v in tally.items() if any(n in k.lower() for n in needles)}
+    ranked = sorted(tally.items(), key=lambda kv: (kv[1][0], kv[1][1]), reverse=True)
+    items = [
+        {"name": name, "units_sold": units, "revenue": _money(rev, currency)}
+        for name, (units, rev) in ranked
+    ]
+
+    def _local(ms: int | None) -> str | None:
+        if ms is None:
+            return None
+        return datetime.fromtimestamp(ms / 1000, tz=tz).strftime("%Y-%m-%d %H:%M")
+
+    result: dict[str, Any] = {
+        "window": {
+            "from": start_dt.strftime("%Y-%m-%d %H:%M"),
+            "to": end_dt.strftime("%Y-%m-%d %H:%M"),
+            "timezone": str(tz),
+        },
+        "currency": currency,
+        "order_count": order_count,
+        "first_order_local": _local(first_ms),
+        "last_order_local": _local(last_ms),
+        "total_units": sum(i["units_sold"] for i in items),
+        "total_revenue": _money(sum(v[1] for v in tally.values()), currency),
+        "items": items,
+        "item_count": len(items),
+    }
+    if needles:
+        result["matching"] = needles
+    return result

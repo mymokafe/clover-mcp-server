@@ -45,8 +45,14 @@ async def list_orders(
     state: str | None = None,
     limit: int = _DEFAULT_LIMIT,
     fields: list[str] | None = None,
+    offset: int = 0,
+    include_line_items: bool = False,
 ) -> list[dict[str, Any]]:
     """List orders within an optional date window and/or state filter.
+
+    Dates are the store's local business days. `offset` skips that many orders
+    (newest first) so callers can page past `limit`; `include_line_items` adds
+    each order's items. Every order also gets `created_local` (store time).
 
     Defaults to today (UTC) when no dates are supplied. Uses 90-day chunking
     so multi-month queries work transparently. Results are capped at `limit`
@@ -59,26 +65,30 @@ async def list_orders(
     `fields` further narrows each result to the named keys (cannot widen past
     the allowlist). This tool is read-only and does NOT modify any order state.
     """
-    if limit < 1 or limit > 200:
-        raise ValueError("limit must be between 1 and 200")
+    if limit < 1 or limit > 1000:
+        raise ValueError("limit must be between 1 and 1000")
+    if offset < 0:
+        raise ValueError("offset must be ≥ 0")
 
     if state is not None and state not in _VALID_STATES:
         raise ValueError(f"state must be one of {sorted(_VALID_STATES)}, got {state!r}")
 
-    today = _today_utc()
-    d_from = _parse_date(date_from, "date_from") if date_from else today
-    d_to = _parse_date(date_to, "date_to") if date_to else today
+    d_from = _parse_date(date_from, "date_from") if date_from else await client.merchant_today()
+    d_to = _parse_date(date_to, "date_to") if date_to else await client.merchant_today()
 
     if d_from > d_to:
         raise ValueError(f"date_from ({d_from}) must be ≤ date_to ({d_to})")
 
     results: list[dict[str, Any]] = []
+    skipped = 0
+    tz = await client.merchant_tzinfo()
 
-    for chunk_start, chunk_end in split_window(d_from, d_to):
+    # Newest window first, so offset/limit page newest-to-oldest across chunks.
+    for chunk_start, chunk_end in reversed(split_window(d_from, d_to)):
         if len(results) >= limit:
             break
-        ts_from = date_to_ms(chunk_start, end_of_day=False)
-        ts_to = date_to_ms(chunk_end, end_of_day=True)
+        ts_from = date_to_ms(chunk_start, end_of_day=False, tz=await client.merchant_tzinfo())
+        ts_to = date_to_ms(chunk_end, end_of_day=True, tz=await client.merchant_tzinfo())
 
         filters = [
             f"createdTime>={ts_from}",
@@ -88,10 +98,20 @@ async def list_orders(
             filters.append(f"state={state}")
 
         params: dict[str, Any] = {"filter": filters}
-        chunk_limit = min(100, limit - len(results))
+        if include_line_items:
+            params["expand"] = "lineItems"
 
-        async for raw in client.iterate("/orders", limit=chunk_limit, **params):
-            results.append(shape_order(raw))
+        async for raw in client.iterate("/orders", limit=100, max_pages=1000, **params):
+            if skipped < offset:
+                skipped += 1
+                continue
+            shaped = shape_order(raw)
+            created = raw.get("createdTime")
+            if isinstance(created, int):
+                shaped["created_local"] = datetime.fromtimestamp(created / 1000, tz=tz).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
+            results.append(shaped)
             if len(results) >= limit:
                 break
 
