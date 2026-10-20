@@ -70,6 +70,7 @@ from clover_mcp.tools.orders import create_order as _create_order
 from clover_mcp.tools.orders import get_order as _get_order
 from clover_mcp.tools.orders import list_open_orders as _list_open_orders
 from clover_mcp.tools.orders import list_orders as _list_orders
+from clover_mcp.tools.reporting import get_item_sales as _get_item_sales
 from clover_mcp.tools.reporting import get_sales_by_employee as _get_sales_by_employee
 from clover_mcp.tools.reporting import get_sales_by_hour as _get_sales_by_hour
 from clover_mcp.tools.reporting import get_sales_summary as _get_sales_summary
@@ -449,15 +450,26 @@ async def list_orders(
     state: str | None = None,
     limit: int = 50,
     fields: list[str] | None = None,
+    offset: int = 0,
+    include_line_items: bool = False,
 ) -> list[dict[str, Any]]:
-    """List orders within an optional date window and/or state filter (default: today, limit 50).
+    """List orders, newest first, for store-local days (default: today, limit 50, max 1000).
 
     state: open | paid | refunded | partially_refunded (omit for all states).
+    offset: skip that many orders to page further back. include_line_items:
+    add each order's items. Each order has created_local (store time).
     Customer card data is never included. This tool is read-only.
     fields: optional list of field names to keep (narrows the response; cannot widen past the allowlist).
     """
     return await _list_orders(
-        _get_client(), date_from=date_from, date_to=date_to, state=state, limit=limit, fields=fields
+        _get_client(),
+        date_from=date_from,
+        date_to=date_to,
+        state=state,
+        limit=limit,
+        fields=fields,
+        offset=offset,
+        include_line_items=include_line_items,
     )
 
 
@@ -627,10 +639,38 @@ async def get_top_items(
 ) -> dict[str, Any]:
     """Return the best-selling items in a date window, ranked by units sold.
 
-    Defaults to today (UTC); 90-day chunked. Each line item counts as one unit.
+    Defaults to today (store local day); 90-day chunked. Each line item counts as one unit.
+    For exact counts of all items or a time-of-day window, use get_item_sales.
     Requires ORDERS_R.
     """
     return await _get_top_items(_get_client(), date_from=date_from, date_to=date_to, top_n=top_n)
+
+
+@mcp.tool(annotations=_READ)
+async def get_item_sales(
+    date_from: str | None = None,
+    date_to: str | None = None,
+    start_time: str | None = None,
+    end_time: str | None = None,
+    name_contains: list[str] | None = None,
+) -> dict[str, Any]:
+    """Count EVERY item sold in a window (no top-N cap), by the store's local time.
+
+    Use this for exact item counts ("how many lattes today", "since opening",
+    "6am-11am"). date_from/date_to: local business days YYYY-MM-DD (default
+    today). start_time/end_time: optional local 24-hour 'HH:MM'. name_contains:
+    optional case-insensitive substrings, e.g. ["latte"]; total_units then sums
+    only matching items. Also returns order_count and first/last order times.
+    Requires ORDERS_R.
+    """
+    return await _get_item_sales(
+        _get_client(),
+        date_from=date_from,
+        date_to=date_to,
+        start_time=start_time,
+        end_time=end_time,
+        name_contains=name_contains,
+    )
 
 
 @mcp.tool(annotations=_READ)

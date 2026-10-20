@@ -7,7 +7,7 @@ tools transparently support queries spanning multiple months or years.
 
 from __future__ import annotations
 
-from datetime import UTC, date, timedelta
+from datetime import UTC, date, datetime, timedelta, tzinfo
 
 
 def split_window(
@@ -34,17 +34,18 @@ def split_window(
     return chunks
 
 
-def date_to_ms(d: date, end_of_day: bool = False) -> int:
-    """Convert a date to a Unix timestamp in milliseconds (UTC midnight).
+def date_to_ms(d: date, end_of_day: bool = False, tz: tzinfo | None = None) -> int:
+    """Convert a date to a Unix timestamp in milliseconds.
 
-    If end_of_day=True, return the last millisecond of that day (23:59:59.999 UTC).
+    With `tz` (the merchant's timezone) the boundary is LOCAL midnight, so a
+    "day" matches the store's business day; without it, UTC midnight.
+    If end_of_day=True, return the last millisecond of that day.
     Clover time filters use millisecond epoch timestamps.
     """
-    from datetime import datetime
-
+    zone = tz or UTC
     if end_of_day:
-        dt = datetime(d.year, d.month, d.day, 23, 59, 59, 999000, tzinfo=UTC)
+        dt = datetime(d.year, d.month, d.day, 23, 59, 59, 999000, tzinfo=zone)
     else:
-        dt = datetime(d.year, d.month, d.day, 0, 0, 0, 0, tzinfo=UTC)
+        dt = datetime(d.year, d.month, d.day, 0, 0, 0, 0, tzinfo=zone)
 
     return int(dt.timestamp() * 1000)

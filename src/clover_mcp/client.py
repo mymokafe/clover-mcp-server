@@ -16,8 +16,10 @@ import time
 from collections import deque
 from collections.abc import AsyncIterator
 from contextlib import suppress
+from datetime import date, datetime
 from typing import Any
 from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
 
@@ -280,14 +282,41 @@ class CloverClient:
     _merchant_cache: dict[str, Any] | None = None
 
     async def get_merchant_info(self) -> dict[str, Any]:
-        """Fetch and cache merchant info (currency, timezone, country)."""
+        """Fetch and cache merchant info (currency, timezone, country).
+
+        Live merchants often omit currency/timezone on the base merchant record;
+        Clover keeps them on /properties, so missing keys are filled from there.
+        """
         if self._merchant_cache is None:
-            self._merchant_cache = await self.get(f"/v3/merchants/{self._config.merchant_id}")
+            info = dict(await self.get(f"/v3/merchants/{self._config.merchant_id}"))
+            if not (info.get("defaultCurrency") or info.get("currency")) or not info.get(
+                "timezone"
+            ):
+                try:
+                    props = await self.get(f"/v3/merchants/{self._config.merchant_id}/properties")
+                except Exception:  # noqa: BLE001 - properties are a best-effort fallback
+                    props = {}
+                for key in ("defaultCurrency", "timezone"):
+                    if not info.get(key) and props.get(key):
+                        info[key] = props[key]
+            self._merchant_cache = info
         return self._merchant_cache
+
+    async def merchant_tzinfo(self) -> ZoneInfo:
+        """The merchant's local timezone (falls back to UTC if unknown/invalid)."""
+        name = await self.merchant_timezone()
+        try:
+            return ZoneInfo(name)
+        except (ZoneInfoNotFoundError, ValueError):
+            return ZoneInfo("UTC")
+
+    async def merchant_today(self) -> date:
+        """Today's date in the merchant's local timezone (the store's business day)."""
+        return datetime.now(tz=await self.merchant_tzinfo()).date()
 
     async def merchant_currency(self) -> str:
         info = await self.get_merchant_info()
-        currency = info.get("defaultCurrency") or info.get("currency")    or "USD"
+        currency = info.get("defaultCurrency") or info.get("currency")
         if not currency:
             raise ValueError(
                 f"Merchant {self._config.merchant_id} response is missing currency metadata; "
