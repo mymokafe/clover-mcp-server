@@ -259,6 +259,6 @@ See [SECURITY.md](SECURITY.md) for the vulnerability disclosure policy.
   operator's credentials; it bundles no Clover SDK or proprietary code. Clover may
   change or restrict its API at any time, which may break functionality.
 
-## License
+## License 
 
 MIT — see [LICENSE](LICENSE).
